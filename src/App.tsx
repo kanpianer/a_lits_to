@@ -547,7 +547,7 @@ export default function App() {
   }, [list, now]);
 
   return (
-    <div className="fixed inset-0 bg-natural-bg text-natural-ink font-sans selection:bg-natural-surface overflow-hidden flex flex-col transition-colors duration-300">
+    <div className="fixed inset-0 bg-natural-bg text-natural-ink font-sans selection:bg-natural-surface overflow-hidden flex flex-col transition-colors duration-300 select-none">
       {!list ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-4 border-natural-border border-t-natural-ink rounded-full animate-spin"></div>
