@@ -1,0 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Georgia:ital,wght@0,400;0,700;1,400&display=swap");
+@import url("https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.1.0/style.css");
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-natural-bg: #fdfcfb;
+  --color-natural-ink: #1c1c1c;
+  --color-natural-muted: #7a7a7a;
+  --color-natural-border: #e5e5e2;
+  --color-natural-accent: #4a5d4e;
+  --color-natural-surface: #f5f5f2;
+}
+
+.dark {
+  --color-natural-bg: #121212;
+  --color-natural-ink: #e4e4e4;
+  --color-natural-muted: #9e9e9e;
+  --color-natural-border: #333333;
+  --color-natural-accent: #8ba994;
+  --color-natural-surface: #1e1e1e;
+}
+
+@theme {
+  --color-natural-bg: var(--color-natural-bg);
+  --color-natural-ink: var(--color-natural-ink);
+  --color-natural-muted: var(--color-natural-muted);
+  --color-natural-border: var(--color-natural-border);
+  --color-natural-accent: var(--color-natural-accent);
+  --color-natural-surface: var(--color-natural-surface);
+
+  --font-sans: "LXGW WenKai", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "LXGW WenKai", "Georgia", ui-serif, serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--color-natural-bg);
+  color: var(--color-natural-ink);
+}
+
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
+.no-select {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
