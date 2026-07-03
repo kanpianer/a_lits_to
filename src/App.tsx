@@ -69,6 +69,8 @@ interface TaskRowProps {
   handleToggleTask: (id: string, checked: boolean) => void;
   toggleExpand: (id: string) => void;
   setItemToDelete: (id: string) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }
 
 const TaskRow: React.FC<TaskRowProps> = ({
@@ -78,6 +80,8 @@ const TaskRow: React.FC<TaskRowProps> = ({
   handleToggleTask,
   toggleExpand,
   setItemToDelete,
+  onDragStart,
+  onDragEnd,
 }) => {
   const dragControls = useDragControls();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -117,6 +121,8 @@ const TaskRow: React.FC<TaskRowProps> = ({
       onPointerUp={cancelDrag}
       onPointerCancel={cancelDrag}
       onPointerMove={onPointerMove}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       initial={{ opacity: 0, y: 10 }}
       animate={{
         opacity: 1,
@@ -253,6 +259,7 @@ export default function App() {
     return localStorage.getItem("theme") === "dark";
   });
   const [now, setNow] = useState(Date.now());
+  const [isDragging, setIsDragging] = useState(false);
   const isNewListRef = useRef(false);
   const myColorIndexRef = useRef<number>(0);
 
@@ -608,13 +615,14 @@ export default function App() {
 
         {/* Task List Container */}
         <div className="flex-1 relative min-h-0 flex flex-col mb-3 sm:mb-4 pr-1 sm:pr-2">
-          <Reorder.Group
-            axis="y"
-            values={list.items}
-            onReorder={handleReorder}
-            className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col"
-            layoutScroll
-          >
+          <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isDragging && "overflow-hidden")}>
+            <Reorder.Group
+              axis="y"
+              values={list.items}
+              onReorder={handleReorder}
+              className="flex flex-col"
+              layoutScroll
+            >
             <AnimatePresence initial={false}>
               {list.items.map((item) => (
                 <TaskRow
@@ -625,6 +633,8 @@ export default function App() {
                   handleToggleTask={handleToggleTask}
                   toggleExpand={toggleExpand}
                   setItemToDelete={setItemToDelete}
+                  onDragStart={() => setIsDragging(true)}
+                  onDragEnd={() => setIsDragging(false)}
                 />
               ))}
             </AnimatePresence>
@@ -636,6 +646,7 @@ export default function App() {
               </div>
             )}
           </Reorder.Group>
+          </div>
 
           <AnimatePresence>
             {isCompleted && list.items.length > 0 && (
