@@ -14,6 +14,7 @@ import {
   useDragControls,
 } from "motion/react";
 import { Check, Copy, Trash2, Plus, X, Sun, Moon } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -67,10 +68,9 @@ interface TaskRowProps {
   isExpanded: boolean;
   isCompleted: boolean;
   handleToggleTask: (id: string, checked: boolean) => void;
+  handleUpdateTaskText: (id: string, text: string) => void;
   toggleExpand: (id: string) => void;
   setItemToDelete: (id: string) => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
 }
 
 const TaskRow: React.FC<TaskRowProps> = ({
@@ -78,20 +78,117 @@ const TaskRow: React.FC<TaskRowProps> = ({
   isExpanded,
   isCompleted,
   handleToggleTask,
+  handleUpdateTaskText,
   toggleExpand,
   setItemToDelete,
-  onDragStart,
-  onDragEnd,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(item.text);
+
+  useEffect(() => {
+    setEditText(item.text);
+  }, [item.text]);
+
+  const handleEditSubmit = () => {
+    if (editText.trim() && editText !== item.text) {
+      handleUpdateTaskText(item.id, editText.trim());
+    } else {
+      setEditText(item.text);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleEditSubmit();
+    } else if (e.key === 'Escape') {
+      setEditText(item.text);
+      setIsEditing(false);
+    }
+  };
+
   const dragControls = useDragControls();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const isDragging = useRef(false);
 
-  const startDrag = (e: React.PointerEvent) => {
+  useEffect(() => {
+    const preventScroll = (e: TouchEvent) => {
+      if (isDragging.current) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("touchmove", preventScroll, { passive: false });
+    return () => {
+      document.removeEventListener("touchmove", preventScroll);
+    };
+  }, []);
+
+const startDrag = (e: React.PointerEvent) => {
     touchStartPos.current = { x: e.clientX, y: e.clientY };
     timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      isDragging.current = true;
       dragControls.start(e);
       if (navigator.vibrate) navigator.vibrate(50);
+      
+      const container = document.getElementById("task-scroll-container");
+      if (!container) return;
+      
+      const initialScrollHeight = container.scrollHeight;
+      const maxScrollTop = initialScrollHeight - container.clientHeight;
+      
+      const scrollState = { speed: 0, raf: null as number | null };
+      
+      const handlePointerMove = (moveEvent: PointerEvent | TouchEvent) => {
+        if (!isDragging.current) return;
+        
+        const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as PointerEvent).clientY;
+        
+        const rect = container.getBoundingClientRect();
+        const threshold = 100;
+        const maxSpeed = 20;
+        
+        if (clientY < rect.top + threshold) {
+          scrollState.speed = -maxSpeed * (1 - Math.max(0, clientY - rect.top) / threshold);
+        } else if (clientY > rect.bottom - threshold) {
+          scrollState.speed = maxSpeed * (1 - Math.max(0, rect.bottom - clientY) / threshold);
+        } else {
+          scrollState.speed = 0;
+        }
+        
+        if (scrollState.speed !== 0 && !scrollState.raf) {
+          const scrollLoop = () => {
+            if (scrollState.speed !== 0 && isDragging.current) {
+              let newScrollTop = container.scrollTop + scrollState.speed;
+              if (newScrollTop > maxScrollTop) newScrollTop = maxScrollTop;
+              if (newScrollTop < 0) newScrollTop = 0;
+              container.scrollTop = newScrollTop;
+              scrollState.raf = requestAnimationFrame(scrollLoop);
+            } else {
+              scrollState.raf = null;
+            }
+          };
+          scrollState.raf = requestAnimationFrame(scrollLoop);
+        }
+      };
+      
+      const handlePointerUp = () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("touchmove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("touchend", handlePointerUp);
+        scrollState.speed = 0;
+        if (scrollState.raf) {
+          cancelAnimationFrame(scrollState.raf);
+          scrollState.raf = null;
+        }
+      };
+      
+      window.addEventListener("pointermove", handlePointerMove, { passive: false });
+      window.addEventListener("touchmove", handlePointerMove, { passive: false });
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("touchend", handlePointerUp);
     }, 300);
   };
 
@@ -100,6 +197,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    isDragging.current = false;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -121,8 +219,9 @@ const TaskRow: React.FC<TaskRowProps> = ({
       onPointerUp={cancelDrag}
       onPointerCancel={cancelDrag}
       onPointerMove={onPointerMove}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onDragEnd={() => {
+        isDragging.current = false;
+      }}
       initial={{ opacity: 0, y: 10 }}
       animate={{
         opacity: 1,
@@ -181,48 +280,67 @@ const TaskRow: React.FC<TaskRowProps> = ({
       >
         <motion.div
           initial={false}
-          animate={{ height: isExpanded ? "auto" : "22px" }}
+          animate={{ height: (isExpanded || isEditing) ? "auto" : "22px" }}
           transition={{ duration: 0.15, ease: "easeInOut" }}
           className="overflow-hidden relative w-full"
         >
-          {/* Clamped version (visible when collapsed) */}
-          <div
-            className={cn(
-              "absolute top-0 left-0 right-0 transition-opacity duration-150",
-              isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
-            )}
-            aria-hidden="true"
-          >
-            <p
-              className={cn(
-                "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1",
-                item.checked
-                  ? "text-natural-ink line-through opacity-40"
-                  : "text-natural-ink",
-              )}
-            >
-              {item.text}
-            </p>
-          </div>
+          {isEditing ? (
+            <textarea
+              value={editText}
+              onChange={(e) => {
+                setEditText(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
+              onBlur={handleEditSubmit}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              className="w-full bg-transparent outline-none border-none text-[14px] sm:text-[15px] leading-[22px] text-natural-ink resize-none overflow-hidden"
+              rows={Math.max(1, editText.split('\n').length)}
+              style={{ minHeight: '22px' }}
+            />
+          ) : (
+            <div onDoubleClick={() => setIsEditing(true)}>
+              {/* Clamped version (visible when collapsed) */}
+              <div
+                className={cn(
+                  "absolute top-0 left-0 right-0 transition-opacity duration-150",
+                  isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+                )}
+                aria-hidden="true"
+              >
+                <p
+                  className={cn(
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1 select-none",
+                    item.checked
+                      ? "text-natural-ink line-through opacity-40"
+                      : "text-natural-ink",
+                  )}
+                >
+                  {item.text}
+                </p>
+              </div>
 
-          {/* Full version */}
-          <div
-            className={cn(
-              "transition-opacity duration-150",
-              isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
-            )}
-          >
-            <p
-              className={cn(
-                "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap",
-                item.checked
-                  ? "text-natural-ink line-through opacity-40"
-                  : "text-natural-ink",
-              )}
-            >
-              {item.text}
-            </p>
-          </div>
+              {/* Full version */}
+              <div
+                className={cn(
+                  "transition-opacity duration-150",
+                  isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap select-none",
+                    item.checked
+                      ? "text-natural-ink line-through opacity-40"
+                      : "text-natural-ink",
+                  )}
+                >
+                  {item.text}
+                </p>
+              </div>
+            </div>
+          )}
         </motion.div>
       </div>
 
@@ -241,6 +359,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
 };
 
 export default function App() {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [listId, setListId] = useState<string>("");
   const [list, setList] = useState<TaskList | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -252,6 +371,7 @@ export default function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [showListDeletedPopup, setShowListDeletedPopup] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -259,7 +379,6 @@ export default function App() {
     return localStorage.getItem("theme") === "dark";
   });
   const [now, setNow] = useState(Date.now());
-  const [isDragging, setIsDragging] = useState(false);
   const isNewListRef = useRef(false);
   const myColorIndexRef = useRef<number>(0);
 
@@ -383,6 +502,18 @@ export default function App() {
       });
     });
 
+    newSocket.on("item_text_updated", ({ itemId, text }: { itemId: string, text: string }) => {
+      setList((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          items: prev.items.map((i) =>
+            i.id === itemId ? { ...i, text } : i,
+          ),
+        };
+      });
+    });
+
     newSocket.on("item_deleted", (itemId: string) => {
       setList((prev) => {
         if (!prev) return prev;
@@ -455,6 +586,19 @@ export default function App() {
     socket.emit("toggle_item", { listId, itemId, checked: newChecked });
   };
 
+const handleUpdateTaskText = (itemId: string, newText: string) => {
+    if (!list || !socket) return;
+    
+    setList({
+      ...list,
+      items: list.items.map((i) =>
+        i.id === itemId ? { ...i, text: newText } : i,
+      ),
+    });
+
+    socket.emit("update_item_text", { listId, itemId, text: newText });
+  };
+
   const toggleExpand = (itemId: string) => {
     setExpandedItems((prev) => {
       const next = new Set(prev);
@@ -510,6 +654,7 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(window.location.href);
       showToast("链接已复制");
+      setShowQRCode(true);
     } catch (err) {
       showToast("复制失败");
     }
@@ -615,14 +760,15 @@ export default function App() {
 
         {/* Task List Container */}
         <div className="flex-1 relative min-h-0 flex flex-col mb-3 sm:mb-4 pr-1 sm:pr-2">
-          <div className={cn("flex-1 overflow-y-auto overflow-x-hidden", isDragging && "overflow-hidden")}>
-            <Reorder.Group
-              axis="y"
-              values={list.items}
-              onReorder={handleReorder}
-              className="flex flex-col"
-              layoutScroll
-            >
+          <Reorder.Group
+            ref={scrollContainerRef}
+            id="task-scroll-container"
+            axis="y"
+            values={list.items}
+            onReorder={handleReorder}
+            className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative"
+            layoutScroll
+          >
             <AnimatePresence initial={false}>
               {list.items.map((item) => (
                 <TaskRow
@@ -631,10 +777,9 @@ export default function App() {
                   isExpanded={expandedItems.has(item.id)}
                   isCompleted={isCompleted}
                   handleToggleTask={handleToggleTask}
+                  handleUpdateTaskText={handleUpdateTaskText}
                   toggleExpand={toggleExpand}
                   setItemToDelete={setItemToDelete}
-                  onDragStart={() => setIsDragging(true)}
-                  onDragEnd={() => setIsDragging(false)}
                 />
               ))}
             </AnimatePresence>
@@ -646,7 +791,6 @@ export default function App() {
               </div>
             )}
           </Reorder.Group>
-          </div>
 
           <AnimatePresence>
             {isCompleted && list.items.length > 0 && (
@@ -733,7 +877,7 @@ export default function App() {
                 删除此任务？
               </h2>
               <p className="text-natural-muted text-[15px] mb-6">
-                此操作不可恢复，所有协作者将失去访问权限。
+                此操作不可恢复！
               </p>
               <div className="flex flex-col w-full gap-2.5">
                 <button
@@ -749,6 +893,26 @@ export default function App() {
                   取消
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* QR Code Popup */}
+      <AnimatePresence>
+        {showQRCode && (
+          <div 
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-[#1c1c1c]/40 dark:bg-black/60 backdrop-blur-[4px]"
+            onClick={() => setShowQRCode(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white p-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] flex flex-col items-center"
+            >
+              <QRCodeSVG value={window.location.href} size={200} />
             </motion.div>
           </div>
         )}

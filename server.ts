@@ -152,6 +152,18 @@ async function startServer() {
       }
     });
 
+    socket.on("update_item_text", ({ listId, itemId, text }: { listId: string, itemId: string, text: string }) => {
+      const list = taskLists.get(listId);
+      if (list) {
+        const item = list.items.find(i => i.id === itemId);
+        if (item) {
+          if (text.length > 200) text = text.substring(0, 200);
+          item.text = text;
+          socket.to(listId).emit("item_text_updated", { itemId, text });
+        }
+      }
+    });
+
     socket.on("toggle_item", ({ listId, itemId, checked }: { listId: string, itemId: string, checked: boolean }) => {
       const list = taskLists.get(listId);
       if (list) {

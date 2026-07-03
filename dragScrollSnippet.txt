@@ -1,0 +1,57 @@
+  const dragScrollSpeed = useRef(0);
+  const dragScrollRaf = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent | TouchEvent) => {
+      if (!isDragging.current) return;
+      
+      const clientY = 'touches' in e ? e.touches[0].clientY : (e as PointerEvent).clientY;
+      const container = document.getElementById("task-scroll-container");
+      if (!container) return;
+      
+      const rect = container.getBoundingClientRect();
+      const threshold = 80;
+      const maxSpeed = 15;
+      
+      if (clientY < rect.top + threshold) {
+        dragScrollSpeed.current = -maxSpeed * (1 - Math.max(0, clientY - rect.top) / threshold);
+      } else if (clientY > rect.bottom - threshold) {
+        dragScrollSpeed.current = maxSpeed * (1 - Math.max(0, rect.bottom - clientY) / threshold);
+      } else {
+        dragScrollSpeed.current = 0;
+      }
+      
+      if (dragScrollSpeed.current !== 0 && !dragScrollRaf.current) {
+        const scrollLoop = () => {
+          if (dragScrollSpeed.current !== 0 && isDragging.current) {
+            container.scrollTop += dragScrollSpeed.current;
+            dragScrollRaf.current = requestAnimationFrame(scrollLoop);
+          } else {
+            dragScrollRaf.current = null;
+          }
+        };
+        dragScrollRaf.current = requestAnimationFrame(scrollLoop);
+      }
+    };
+    
+    const handlePointerUp = () => {
+      dragScrollSpeed.current = 0;
+      if (dragScrollRaf.current) {
+        cancelAnimationFrame(dragScrollRaf.current);
+        dragScrollRaf.current = null;
+      }
+    };
+    
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("touchmove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("touchend", handlePointerUp);
+    
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("touchmove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("touchend", handlePointerUp);
+      if (dragScrollRaf.current) cancelAnimationFrame(dragScrollRaf.current);
+    };
+  }, []);
