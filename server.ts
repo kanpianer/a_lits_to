@@ -30,7 +30,7 @@ interface TaskList {
 const taskLists = new Map<string, TaskList>();
 const socketToList = new Map<string, string>();
 
-const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
 
 function assignColorIndex(list: TaskList): number {
   if (!list.assignedColorIndices) {
@@ -71,7 +71,7 @@ function assignColorIndex(list: TaskList): number {
 setInterval(() => {
   const now = Date.now();
   for (const [id, list] of taskLists.entries()) {
-    if (now - list.createdAt > FIFTEEN_DAYS_MS) {
+    if (now - list.createdAt > FOURTEEN_DAYS_MS) {
       taskLists.delete(id);
     }
   }
@@ -133,8 +133,16 @@ async function startServer() {
     socket.on("update_title", ({ listId, title }: { listId: string, title: string }) => {
       const list = taskLists.get(listId);
       if (list) {
-        list.title = title;
-        socket.to(listId).emit("title_updated", title);
+        let currentLen = 0;
+        let allowedVal = "";
+        for (let i = 0; i < title.length; i++) {
+          const charLen = title.charCodeAt(i) > 255 ? 2 : 1;
+          if (currentLen + charLen > 18) break;
+          currentLen += charLen;
+          allowedVal += title[i];
+        }
+        list.title = allowedVal;
+        socket.to(listId).emit("title_updated", allowedVal);
       }
     });
 
@@ -146,20 +154,8 @@ async function startServer() {
         
         // Ensure no duplicates
         if (!list.items.find(i => i.id === item.id)) {
-          list.items.push(item);
+          list.items.unshift(item);
           io.to(listId).emit("item_added", item);
-        }
-      }
-    });
-
-    socket.on("update_item_text", ({ listId, itemId, text }: { listId: string, itemId: string, text: string }) => {
-      const list = taskLists.get(listId);
-      if (list) {
-        const item = list.items.find(i => i.id === itemId);
-        if (item) {
-          if (text.length > 200) text = text.substring(0, 200);
-          item.text = text;
-          socket.to(listId).emit("item_text_updated", { itemId, text });
         }
       }
     });

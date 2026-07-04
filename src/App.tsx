@@ -68,8 +68,8 @@ interface TaskRowProps {
   isExpanded: boolean;
   isCompleted: boolean;
   handleToggleTask: (id: string, checked: boolean) => void;
-  handleUpdateTaskText: (id: string, text: string) => void;
   toggleExpand: (id: string) => void;
+  collapseItem: (id: string) => void;
   setItemToDelete: (id: string) => void;
 }
 
@@ -78,39 +78,38 @@ const TaskRow: React.FC<TaskRowProps> = ({
   isExpanded,
   isCompleted,
   handleToggleTask,
-  handleUpdateTaskText,
   toggleExpand,
+  collapseItem,
   setItemToDelete,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(item.text);
-
-  useEffect(() => {
-    setEditText(item.text);
-  }, [item.text]);
-
-  const handleEditSubmit = () => {
-    if (editText.trim() && editText !== item.text) {
-      handleUpdateTaskText(item.id, editText.trim());
-    } else {
-      setEditText(item.text);
-    }
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleEditSubmit();
-    } else if (e.key === 'Escape') {
-      setEditText(item.text);
-      setIsEditing(false);
-    }
-  };
-
   const dragControls = useDragControls();
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
+  const wasDragged = useRef(false);
+  const rowRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (
+        isExpanded &&
+        rowRef.current &&
+        !rowRef.current.contains(e.target as Node)
+      ) {
+        if (window.innerWidth > 640) {
+          collapseItem(item.id);
+        }
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isExpanded, item.text]);
 
   useEffect(() => {
     const preventScroll = (e: TouchEvent) => {
@@ -125,10 +124,12 @@ const TaskRow: React.FC<TaskRowProps> = ({
   }, []);
 
 const startDrag = (e: React.PointerEvent) => {
+    wasDragged.current = false;
     touchStartPos.current = { x: e.clientX, y: e.clientY };
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       isDragging.current = true;
+      wasDragged.current = true;
       dragControls.start(e);
       if (navigator.vibrate) navigator.vibrate(50);
       
@@ -210,8 +211,24 @@ const startDrag = (e: React.PointerEvent) => {
     }
   };
 
+  const handleTextClick = (e: React.MouseEvent) => {
+    if (wasDragged.current) {
+      wasDragged.current = false;
+      return;
+    }
+
+    // If user selected text, don't trigger click action
+    if (window.getSelection()?.toString()) {
+      return;
+    }
+    
+    e.stopPropagation();
+    toggleExpand(item.id);
+  };
+
   return (
     <Reorder.Item
+      ref={rowRef}
       value={item}
       dragListener={false}
       dragControls={dragControls}
@@ -222,17 +239,17 @@ const startDrag = (e: React.PointerEvent) => {
       onDragEnd={() => {
         isDragging.current = false;
       }}
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: -30 }}
       animate={{
         opacity: 1,
         y: 0,
         scale: 1,
         boxShadow: "none",
-        backgroundColor: "",
+        backgroundColor: "rgba(0, 0, 0, 0)",
       }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="group relative flex items-start gap-1.5 sm:gap-2 p-1 mb-1 sm:mb-1.5 hover:bg-natural-surface rounded-[8px] sm:rounded-[10px] transition-colors border-b border-natural-border active:cursor-grabbing select-none no-select"
+      className="group relative flex items-start gap-1.5 sm:gap-2 p-1 mb-1 sm:mb-1.5 hover:bg-natural-surface rounded-[8px] sm:rounded-[10px] transition-colors border-b border-natural-border active:cursor-grabbing max-sm:select-none max-sm:no-select sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
       whileDrag={{
         boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
         backgroundColor: "var(--color-natural-surface)",
@@ -272,46 +289,27 @@ const startDrag = (e: React.PointerEvent) => {
       </button>
 
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleExpand(item.id);
-        }}
+        onClick={handleTextClick}
         className="flex-grow py-[9px] px-0.5 cursor-pointer"
       >
         <motion.div
           initial={false}
-          animate={{ height: (isExpanded || isEditing) ? "auto" : "22px" }}
+          animate={{ height: isExpanded ? "auto" : "22px" }}
           transition={{ duration: 0.15, ease: "easeInOut" }}
           className="overflow-hidden relative w-full"
         >
-          {isEditing ? (
-            <textarea
-              value={editText}
-              onChange={(e) => {
-                setEditText(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-              }}
-              onBlur={handleEditSubmit}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="w-full bg-transparent outline-none border-none text-[14px] sm:text-[15px] leading-[22px] text-natural-ink resize-none overflow-hidden"
-              rows={Math.max(1, editText.split('\n').length)}
-              style={{ minHeight: '22px' }}
-            />
-          ) : (
-            <div onDoubleClick={() => setIsEditing(true)}>
-              {/* Clamped version (visible when collapsed) */}
-              <div
-                className={cn(
-                  "absolute top-0 left-0 right-0 transition-opacity duration-150",
-                  isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
-                )}
-                aria-hidden="true"
-              >
+          <div>
+            {/* Clamped version (visible when collapsed) */}
+            <div
+              className={cn(
+                "absolute top-0 left-0 right-0 transition-opacity duration-150",
+                isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
+              )}
+              aria-hidden="true"
+            >
                 <p
                   className={cn(
-                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1 select-none",
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1 max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800",
                     item.checked
                       ? "text-natural-ink line-through opacity-40"
                       : "text-natural-ink",
@@ -330,7 +328,7 @@ const startDrag = (e: React.PointerEvent) => {
               >
                 <p
                   className={cn(
-                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap select-none",
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800",
                     item.checked
                       ? "text-natural-ink line-through opacity-40"
                       : "text-natural-ink",
@@ -340,7 +338,6 @@ const startDrag = (e: React.PointerEvent) => {
                 </p>
               </div>
             </div>
-          )}
         </motion.div>
       </div>
 
@@ -378,14 +375,8 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem("theme") === "dark";
   });
-  const [now, setNow] = useState(Date.now());
   const isNewListRef = useRef(false);
   const myColorIndexRef = useRef<number>(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -476,7 +467,7 @@ export default function App() {
       setList((prev) => {
         if (!prev) return prev;
         if (prev.items.find((i) => i.id === item.id)) return prev;
-        return { ...prev, items: [...prev.items, item] };
+        return { ...prev, items: [item, ...prev.items] };
       });
     });
 
@@ -499,18 +490,6 @@ export default function App() {
       setList((prev) => {
         if (!prev) return prev;
         return { ...prev, items };
-      });
-    });
-
-    newSocket.on("item_text_updated", ({ itemId, text }: { itemId: string, text: string }) => {
-      setList((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          items: prev.items.map((i) =>
-            i.id === itemId ? { ...i, text } : i,
-          ),
-        };
       });
     });
 
@@ -545,11 +524,20 @@ export default function App() {
   }, [list]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setTitleInput(val);
+    let val = e.target.value;
+    let currentLen = 0;
+    let allowedVal = "";
+    for (let i = 0; i < val.length; i++) {
+      const charLen = val.charCodeAt(i) > 255 ? 2 : 1;
+      if (currentLen + charLen > 18) break;
+      currentLen += charLen;
+      allowedVal += val[i];
+    }
+    
+    setTitleInput(allowedVal);
     if (list && socket) {
-      setList({ ...list, title: val });
-      socket.emit("update_title", { listId, title: val });
+      setList({ ...list, title: allowedVal });
+      socket.emit("update_title", { listId, title: allowedVal });
     }
   };
 
@@ -564,7 +552,7 @@ export default function App() {
     const newItem: TaskItem = { id: uuidv4(), text, checked: false };
 
     // Optimistic update
-    setList({ ...list, items: [...list.items, newItem] });
+    setList({ ...list, items: [newItem, ...list.items] });
     setTaskInput("");
 
     socket.emit("add_item", { listId, item: newItem });
@@ -586,19 +574,6 @@ export default function App() {
     socket.emit("toggle_item", { listId, itemId, checked: newChecked });
   };
 
-const handleUpdateTaskText = (itemId: string, newText: string) => {
-    if (!list || !socket) return;
-    
-    setList({
-      ...list,
-      items: list.items.map((i) =>
-        i.id === itemId ? { ...i, text: newText } : i,
-      ),
-    });
-
-    socket.emit("update_item_text", { listId, itemId, text: newText });
-  };
-
   const toggleExpand = (itemId: string) => {
     setExpandedItems((prev) => {
       const next = new Set(prev);
@@ -607,6 +582,15 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
       } else {
         next.add(itemId);
       }
+      return next;
+    });
+  };
+
+  const collapseItem = (itemId: string) => {
+    setExpandedItems((prev) => {
+      if (!prev.has(itemId)) return prev;
+      const next = new Set(prev);
+      next.delete(itemId);
       return next;
     });
   };
@@ -678,26 +662,6 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
     }, 3000);
   };
 
-  const expiryText = useMemo(() => {
-    if (!list) return "";
-    const FIFTEEN_DAYS = 15 * 24 * 60 * 60 * 1000;
-    const expiryDate = list.createdAt + FIFTEEN_DAYS;
-    const diff = expiryDate - now;
-    if (diff <= 0) return "任务已过期";
-
-    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-    if (days < 1) {
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-      const h = hours.toString().padStart(2, "0");
-      const m = minutes.toString().padStart(2, "0");
-      const s = seconds.toString().padStart(2, "0");
-      return `${h}:${m}:${s} 后任务将自动销毁`;
-    }
-    return `${days}天后任务将自动销毁`;
-  }, [list, now]);
-
   return (
     <div className="fixed inset-0 bg-natural-bg text-natural-ink font-sans selection:bg-natural-surface overflow-hidden flex flex-col transition-colors duration-300 select-none">
       {!list ? (
@@ -724,8 +688,9 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
           value={titleInput}
           onChange={handleTitleChange}
           onFocus={handleInputFocus}
+          maxLength={18}
           placeholder="输入任务名称"
-          className="font-serif italic text-[24px] sm:text-[28px] text-center w-full text-natural-ink bg-transparent border-none outline-none placeholder:opacity-20 mb-3 sm:mb-4 shrink-0"
+          className="font-serif italic text-[24px] sm:text-[28px] text-center w-full text-natural-ink bg-transparent border-none outline-none placeholder:opacity-20 mb-3 sm:mb-4 shrink-0 max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
         />
 
         {/* Task Entry Area */}
@@ -742,7 +707,7 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
             }}
             placeholder="输入任务"
             rows={1}
-            className="w-full bg-natural-surface border border-natural-border shadow-[0_4px_12px_rgba(0,0,0,0.02)] rounded-[10px] sm:rounded-[12px] pl-4 sm:pl-5 pr-[72px] sm:pr-[88px] py-3 sm:py-3.5 text-[16px] outline-none resize-none placeholder:opacity-40 leading-tight"
+            className="w-full bg-natural-surface border border-natural-border shadow-[0_4px_12px_rgba(0,0,0,0.02)] rounded-[10px] sm:rounded-[12px] pl-4 sm:pl-5 pr-[72px] sm:pr-[88px] py-3 sm:py-3.5 text-[16px] outline-none resize-none placeholder:opacity-40 leading-tight max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
           />
           <button
             onClick={handleAddTask}
@@ -777,8 +742,8 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
                   isExpanded={expandedItems.has(item.id)}
                   isCompleted={isCompleted}
                   handleToggleTask={handleToggleTask}
-                  handleUpdateTaskText={handleUpdateTaskText}
                   toggleExpand={toggleExpand}
+                  collapseItem={collapseItem}
                   setItemToDelete={setItemToDelete}
                 />
               ))}
@@ -826,7 +791,7 @@ const handleUpdateTaskText = (itemId: string, newText: string) => {
         </footer>
 
         <p className="text-[11px] sm:text-[12px] text-natural-muted text-center mt-3 sm:mt-4 tracking-[0.05em] uppercase shrink-0">
-          {expiryText}
+          正常情况，任务将在十四天后自动销毁。
         </p>
       </main>
       )}
