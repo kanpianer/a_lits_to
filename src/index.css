@@ -59,3 +59,9 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
+
+::selection {
+  background-color: var(--user-selection-bg, rgba(0, 122, 255, 0.22)) !important;
+  color: inherit !important;
+}
+

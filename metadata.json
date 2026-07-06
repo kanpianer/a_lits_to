@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Collaborative Task List",
+  "description": "A beautiful, real-time collaborative task list with high-contrast UI and custom user color highlights.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

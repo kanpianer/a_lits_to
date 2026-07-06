@@ -22,6 +22,68 @@ function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
+function renderHighlightedTitle(text: string, color: string) {
+  if (!text) return null;
+
+  const trimmed = text.trimStart();
+  if (trimmed.length === 0) {
+    return <span>{text}</span>;
+  }
+
+  const leadingSpacesCount = text.length - trimmed.length;
+  const leadingSpaces = text.substring(0, leadingSpacesCount);
+
+  // Check if first non-whitespace character is English
+  const isEnglish = /^[a-zA-Z]/.test(trimmed);
+
+  if (isEnglish) {
+    // Find the first English word (letters only)
+    const match = trimmed.match(/^([a-zA-Z]+)/);
+    if (match) {
+      const firstWord = match[1];
+      const highlightCount = Math.min(2, firstWord.length);
+      const highlightedPart = firstWord.substring(0, highlightCount);
+      const remainingWordPart = firstWord.substring(highlightCount);
+      const restOfText = trimmed.substring(firstWord.length);
+
+      return (
+        <>
+          {leadingSpaces}
+          <span style={{ color }}>{highlightedPart}</span>
+          {remainingWordPart}
+          {restOfText}
+        </>
+      );
+    }
+  }
+
+  // Highlight the first character
+  const firstChar = trimmed.substring(0, 1);
+  const rest = trimmed.substring(1);
+
+  return (
+    <>
+      {leadingSpaces}
+      <span style={{ color }}>{firstChar}</span>
+      {rest}
+    </>
+  );
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  if (!hex || !hex.startsWith("#")) {
+    return `rgba(0, 122, 255, ${alpha})`;
+  }
+  const cleanHex = hex.replace("#", "");
+  if (cleanHex.length !== 6) {
+    return `rgba(0, 122, 255, ${alpha})`;
+  }
+  const r = parseInt(cleanHex.substring(0, 2), 16);
+  const g = parseInt(cleanHex.substring(2, 4), 16);
+  const b = parseInt(cleanHex.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function playTickSound() {
   try {
     const AudioContext =
@@ -249,7 +311,7 @@ const startDrag = (e: React.PointerEvent) => {
       }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2 }}
-      className="group relative flex items-start gap-1.5 sm:gap-2 p-1 mb-1 sm:mb-1.5 hover:bg-natural-surface rounded-[8px] sm:rounded-[10px] transition-colors border-b border-natural-border active:cursor-grabbing max-sm:select-none max-sm:no-select sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
+      className="group relative flex items-start gap-1.5 sm:gap-2 p-1 mb-1 sm:mb-1.5 hover:bg-natural-surface rounded-[8px] sm:rounded-[10px] transition-colors border-b border-natural-border active:cursor-grabbing max-sm:select-none max-sm:no-select"
       whileDrag={{
         boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
         backgroundColor: "var(--color-natural-surface)",
@@ -289,8 +351,7 @@ const startDrag = (e: React.PointerEvent) => {
       </button>
 
       <div
-        onClick={handleTextClick}
-        className="flex-grow py-[9px] px-0.5 cursor-pointer"
+        className="flex-grow py-[9px] px-0.5"
       >
         <motion.div
           initial={false}
@@ -307,28 +368,13 @@ const startDrag = (e: React.PointerEvent) => {
               )}
               aria-hidden="true"
             >
-                <p
-                  className={cn(
-                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1 max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800",
-                    item.checked
-                      ? "text-natural-ink line-through opacity-40"
-                      : "text-natural-ink",
-                  )}
-                >
-                  {item.text}
-                </p>
-              </div>
-
-              {/* Full version */}
               <div
-                className={cn(
-                  "transition-opacity duration-150",
-                  isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
-                )}
+                onClick={handleTextClick}
+                className="inline-block w-fit max-w-full cursor-pointer"
               >
                 <p
                   className={cn(
-                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800",
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap line-clamp-1 max-sm:select-none",
                     item.checked
                       ? "text-natural-ink line-through opacity-40"
                       : "text-natural-ink",
@@ -338,6 +384,31 @@ const startDrag = (e: React.PointerEvent) => {
                 </p>
               </div>
             </div>
+
+            {/* Full version */}
+            <div
+              className={cn(
+                "transition-opacity duration-150",
+                isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
+              )}
+            >
+              <div
+                onClick={handleTextClick}
+                className="inline-block w-fit max-w-full cursor-pointer"
+              >
+                <p
+                  className={cn(
+                    "text-[14px] sm:text-[15px] leading-[22px] transition-colors duration-150 break-words whitespace-pre-wrap max-sm:select-none",
+                    item.checked
+                      ? "text-natural-ink line-through opacity-40"
+                      : "text-natural-ink",
+                  )}
+                >
+                  {item.text}
+                </p>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </div>
 
@@ -377,6 +448,8 @@ export default function App() {
   });
   const isNewListRef = useRef(false);
   const myColorIndexRef = useRef<number>(0);
+  const [myColorIndex, setMyColorIndex] = useState<number>(0);
+  const userColor = CHECK_COLORS[myColorIndex % CHECK_COLORS.length];
 
   useEffect(() => {
     if (isDarkMode) {
@@ -421,6 +494,26 @@ export default function App() {
   useEffect(() => {
     if (!listId) return;
 
+    let clientId = null;
+    try {
+      clientId = localStorage.getItem("collab_task_client_id");
+      if (!clientId) {
+        clientId = sessionStorage.getItem("collab_task_client_id");
+      }
+    } catch (e) {
+      // Ignore if storage is inaccessible
+    }
+
+    if (!clientId) {
+      clientId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      try {
+        localStorage.setItem("collab_task_client_id", clientId);
+        sessionStorage.setItem("collab_task_client_id", clientId);
+      } catch (e) {
+        // Ignore if storage is blocked
+      }
+    }
+
     // Determine the correct socket URL based on environment variables or current host
     // In AI Studio (Cloud Run), the socket needs to connect to the same host
     // Since we are running the Express server on the same origin, we can just use /
@@ -431,10 +524,10 @@ export default function App() {
 
     newSocket.on("connect", () => {
       if (isNewListRef.current) {
-        newSocket.emit("create_list", listId);
+        newSocket.emit("create_list", { listId, clientId });
         isNewListRef.current = false;
       } else {
-        newSocket.emit("join_list", listId);
+        newSocket.emit("join_list", { listId, clientId });
       }
     });
 
@@ -451,6 +544,7 @@ export default function App() {
 
     newSocket.on("your_color_index", (colorIndex: number) => {
       myColorIndexRef.current = colorIndex;
+      setMyColorIndex(colorIndex);
     });
 
     newSocket.on("sync_state", (initialState: TaskList) => {
@@ -663,7 +757,12 @@ export default function App() {
   };
 
   return (
-    <div className="fixed inset-0 bg-natural-bg text-natural-ink font-sans selection:bg-natural-surface overflow-hidden flex flex-col transition-colors duration-300 select-none">
+    <div 
+      className="fixed inset-0 bg-natural-bg text-natural-ink font-sans overflow-hidden flex flex-col transition-colors duration-300 select-none"
+      style={{
+        "--user-selection-bg": hexToRgba(userColor, isDarkMode ? 0.35 : 0.22)
+      } as React.CSSProperties}
+    >
       {!list ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-4 border-natural-border border-t-natural-ink rounded-full animate-spin"></div>
@@ -683,15 +782,33 @@ export default function App() {
         </button>
 
         {/* Title Input */}
-        <input
-          type="text"
-          value={titleInput}
-          onChange={handleTitleChange}
-          onFocus={handleInputFocus}
-          maxLength={18}
-          placeholder="输入任务名称"
-          className="font-serif italic text-[24px] sm:text-[28px] text-center w-full text-natural-ink bg-transparent border-none outline-none placeholder:opacity-20 mb-3 sm:mb-4 shrink-0 max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
-        />
+        <div className="flex justify-center mb-3 sm:mb-4 shrink-0">
+          <div className="relative inline-flex items-center max-w-full">
+            {/* Sizing and visual representation span */}
+            <span 
+              className={cn(
+                "font-serif italic text-[24px] sm:text-[28px] text-center whitespace-pre px-2 pointer-events-none select-none max-w-full block text-natural-ink",
+                !titleInput && "invisible"
+              )}
+              aria-hidden="true"
+            >
+              {titleInput ? renderHighlightedTitle(titleInput, userColor) : "输入任务名称"}
+            </span>
+            <input
+              type="text"
+              value={titleInput}
+              onChange={handleTitleChange}
+              onFocus={handleInputFocus}
+              maxLength={18}
+              placeholder="输入任务名称"
+              className={cn(
+                "font-serif italic text-[24px] sm:text-[28px] text-center absolute inset-0 w-full h-full bg-transparent border-none outline-none max-sm:select-none px-2",
+                titleInput ? "text-transparent" : "text-natural-ink placeholder:opacity-20"
+              )}
+              style={{ caretColor: "var(--color-natural-ink)" }}
+            />
+          </div>
+        </div>
 
         {/* Task Entry Area */}
         <div className="relative mb-3 sm:mb-4 shrink-0 flex items-center">
@@ -707,7 +824,7 @@ export default function App() {
             }}
             placeholder="输入任务"
             rows={1}
-            className="w-full bg-natural-surface border border-natural-border shadow-[0_4px_12px_rgba(0,0,0,0.02)] rounded-[10px] sm:rounded-[12px] pl-4 sm:pl-5 pr-[72px] sm:pr-[88px] py-3 sm:py-3.5 text-[16px] outline-none resize-none placeholder:opacity-40 leading-tight max-sm:select-none sm:selection:bg-blue-200 dark:sm:selection:bg-blue-800"
+            className="w-full bg-natural-surface border border-natural-border shadow-[0_4px_12px_rgba(0,0,0,0.02)] rounded-[10px] sm:rounded-[12px] pl-4 sm:pl-5 pr-[72px] sm:pr-[88px] py-3 sm:py-3.5 text-[16px] outline-none resize-none placeholder:opacity-40 leading-tight max-sm:select-none"
           />
           <button
             onClick={handleAddTask}
@@ -791,7 +908,7 @@ export default function App() {
         </footer>
 
         <p className="text-[11px] sm:text-[12px] text-natural-muted text-center mt-3 sm:mt-4 tracking-[0.05em] uppercase shrink-0">
-          正常情况，任务将在十四天后自动销毁。
+          正常情况，任务将在14天后自动销毁。
         </p>
       </main>
       )}

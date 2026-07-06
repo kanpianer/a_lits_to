@@ -14,6 +14,7 @@ interface TaskItem {
 
 interface ClientConnection {
   socketId: string;
+  clientId?: string;
   colorIndex: number;
 }
 
@@ -24,6 +25,7 @@ interface TaskList {
   createdAt: number;
   connections: ClientConnection[];
   assignedColorIndices?: number[];
+  clientColors?: Record<string, number>;
 }
 
 // In-memory store
@@ -79,7 +81,7 @@ setInterval(() => {
 
 async function startServer() {
   const app = express();
-  const PORT = parseInt(process.env.PORT || '3000');
+  const PORT = 3000;
   
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
@@ -87,7 +89,7 @@ async function startServer() {
   });
 
   io.on("connection", (socket) => {
-    const handleJoinList = (listId: string, isCreate: boolean) => {
+    const handleJoinList = (listId: string, isCreate: boolean, clientId?: string) => {
       let list = taskLists.get(listId);
       if (!list) {
         if (isCreate) {
@@ -115,8 +117,18 @@ async function startServer() {
       let colorIndex = 0;
       const existingConn = list.connections.find(c => c.socketId === socket.id);
       if (!existingConn) {
-        colorIndex = assignColorIndex(list);
-        list.connections.push({ socketId: socket.id, colorIndex });
+        if (!list.clientColors) {
+          list.clientColors = {};
+        }
+        if (clientId && typeof list.clientColors[clientId] === "number") {
+          colorIndex = list.clientColors[clientId];
+        } else {
+          colorIndex = assignColorIndex(list);
+          if (clientId) {
+            list.clientColors[clientId] = colorIndex;
+          }
+        }
+        list.connections.push({ socketId: socket.id, clientId, colorIndex });
         socketToList.set(socket.id, listId);
       } else {
         colorIndex = existingConn.colorIndex;
@@ -127,8 +139,21 @@ async function startServer() {
       socket.emit("your_color_index", colorIndex);
     };
 
-    socket.on("join_list", (listId: string) => handleJoinList(listId, false));
-    socket.on("create_list", (listId: string) => handleJoinList(listId, true));
+    socket.on("join_list", (data: string | { listId: string, clientId?: string }) => {
+      if (typeof data === "string") {
+        handleJoinList(data, false);
+      } else {
+        handleJoinList(data.listId, false, data.clientId);
+      }
+    });
+
+    socket.on("create_list", (data: string | { listId: string, clientId?: string }) => {
+      if (typeof data === "string") {
+        handleJoinList(data, true);
+      } else {
+        handleJoinList(data.listId, true, data.clientId);
+      }
+    });
 
     socket.on("update_title", ({ listId, title }: { listId: string, title: string }) => {
       const list = taskLists.get(listId);
